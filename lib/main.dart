@@ -1,13 +1,12 @@
-import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
-/// Entrypoint of the application.
 void main() {
   runApp(const MyApp());
 }
 
-/// [Widget] building the [MaterialApp].
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -15,231 +14,284 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Center(
-          child: Dock(
-            items: const [
-              Icons.person,
-              Icons.message,
-              Icons.call,
-              Icons.camera,
-              Icons.photo,
-            ],
-            builder: (icon) {
-              return Container(
-                width: 56,
-                height: 56,
-                margin: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.primaries[icon.hashCode % Colors.primaries.length]
-                          .withOpacity(0.8),
-                      Colors.primaries[icon.hashCode % Colors.primaries.length],
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(icon, color: Colors.white, size: 32),
-              );
-            },
+      theme: ThemeData.dark(),
+      home: const DockExample(),
+    );
+  }
+}
+
+class DockExample extends StatelessWidget {
+  const DockExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: NetworkImage(
+              'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&q=80',
+            ),
+            fit: BoxFit.cover,
           ),
+        ),
+        child: Column(
+          children: [
+            const Spacer(),
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: const MacOSDock(),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Dock of the reorderable [items].
-class Dock<T> extends StatefulWidget {
-  const Dock({
-    super.key,
-    this.items = const [],
-    required this.builder,
-    this.itemSize = 56.0,
-    this.maxScale = 1.5,
+class DockItem {
+  final String icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  const DockItem({
+    required this.icon,
+    required this.tooltip,
+    this.onTap,
   });
-
-  /// Initial [T] items to put in this [Dock].
-  final List<T> items;
-
-  /// Builder building the provided [T] item.
-  final Widget Function(T) builder;
-
-  /// Size of each item in the dock.
-  final double itemSize;
-
-  /// Maximum scale of the item when dragging.
-  final double maxScale;
-
-  @override
-  State<Dock<T>> createState() => _DockState<T>();
 }
 
-/// State of the [Dock] used to manipulate the [_items].
-class _DockState<T> extends State<Dock<T>> with TickerProviderStateMixin {
-  /// [T] items being manipulated.
-  late final List<T> _items = widget.items.toList();
+class MacOSDock extends StatelessWidget {
+  const MacOSDock({super.key});
 
-  /// Position of the drag.
-  double? _dragPosition;
+  @override
+  Widget build(BuildContext context) {
+    return const DockContainer(
+      items: [
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/folder.svg',
+          tooltip: 'Finder',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/google-chrome.svg',
+          tooltip: 'Chrome',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/compass.svg',
+          tooltip: 'Safari',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/gmail.svg',
+          tooltip: 'Mail',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/calendar.svg',
+          tooltip: 'Calendar',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/image.svg',
+          tooltip: 'Photos',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/message.svg',
+          tooltip: 'Messages',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/signal.svg',
+          tooltip: 'Signal',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/spotify.svg',
+          tooltip: 'Spotify',
+        ),
+        DockItem(
+          icon:
+              'https://api.iconify.design/mdi/microsoft-visual-studio-code.svg',
+          tooltip: 'VS Code',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/console.svg',
+          tooltip: 'Terminal',
+        ),
+        DockItem(
+          icon: 'https://api.iconify.design/mdi/delete.svg',
+          tooltip: 'Trash',
+        ),
+      ],
+    );
+  }
+}
 
-  /// Index of the item being dragged.
-  int? _draggedIndex;
+class DockContainer extends StatefulWidget {
+  final List<DockItem> items;
 
-  /// Keys for the items in the dock.
-  late List<GlobalKey> _keys;
+  const DockContainer({
+    super.key,
+    required this.items,
+  });
+
+  @override
+  State<DockContainer> createState() => _DockContainerState();
+}
+
+class _DockContainerState extends State<DockContainer>
+    with SingleTickerProviderStateMixin {
+  static const double minWidth = 50;
+  static const double maxWidth = 85;
+  static const double heightFractionOfScreen = 0.075;
+  static const double dockPadding = 8;
+  static const double iconPadding = 4;
+  static const double maxZoom = 2.0;
+  static const Duration animationDuration = Duration(milliseconds: 150);
+  static const Curve animationCurve = Curves.easeOutQuart;
+
+  late final AnimationController _controller;
+  Offset? _mousePosition;
 
   @override
   void initState() {
     super.initState();
-    _keys = List.generate(
-      _items.length,
-      (index) => GlobalKey(debugLabel: 'dock_item_$index'),
+    _controller = AnimationController(
+      vsync: this,
+      duration: animationDuration,
     );
   }
 
-  /// Calculate the scale of the item based on the distance from the drag position.
-  double _getScale(double distance, double position) {
-    final maxDistance = widget.itemSize * 1.5;
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  double _calculateScale(double distance, double maxDistance) {
     if (distance > maxDistance) return 1.0;
 
-    final scale = 1.0 + (widget.maxScale - 1.0) * (1 - distance / maxDistance);
-    return scale;
+    final double normalizedDistance = distance / maxDistance;
+    final double scale = 1 - math.pow(normalizedDistance, 2) as double;
+
+    return 1.0 + (maxZoom - 1.0) * scale;
   }
 
-  /// Update the drag position.
-  void _updateDragPosition(Offset globalPosition) {
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final localPosition = box.globalToLocal(globalPosition);
-    setState(() {
-      _dragPosition = localPosition.dx;
-    });
+  double _calculateWidth(int index, BoxConstraints constraints) {
+    if (_mousePosition == null) return minWidth;
+
+    final itemCenter = index * (minWidth + iconPadding * 2) + minWidth / 2;
+    final distance = (_mousePosition!.dx - itemCenter).abs();
+    final maxDistance = minWidth * 2;
+
+    final scale = _calculateScale(distance, maxDistance);
+    return minWidth * scale;
   }
 
-  /// Handle drag update.
-  void _onDragUpdate(DragUpdateDetails details, int index) {
-    _updateDragPosition(details.globalPosition);
-    final draggedItemNewIndex = _getTargetIndex(details.globalPosition);
+  double _calculateOffset(int index, double scale) {
+    final normalizedScale = (scale - 1.0) / (maxZoom - 1.0);
+    final lift = 30 * math.pow(normalizedScale, 2);
+    return -lift as double;
+  }
 
-    if (draggedItemNewIndex != null &&
-        draggedItemNewIndex != _draggedIndex &&
-        draggedItemNewIndex >= 0 &&
-        draggedItemNewIndex < _items.length) {
-      setState(() {
-        final item = _items.removeAt(_draggedIndex!);
-        _items.insert(draggedItemNewIndex, item);
+  List<double> _calculateNeighborScales(int index) {
+    if (_mousePosition == null) return List.filled(widget.items.length, 1.0);
 
-        final key = _keys.removeAt(_draggedIndex!);
-        _keys.insert(draggedItemNewIndex, key);
+    final scales = List<double>.filled(widget.items.length, 1.0);
+    final itemCenter = index * (minWidth + iconPadding * 2) + minWidth / 2;
+    final mouseDistance = (_mousePosition!.dx - itemCenter).abs();
+    final maxDistance = minWidth * 2;
 
-        _draggedIndex = draggedItemNewIndex;
-      });
+    scales[index] = _calculateScale(mouseDistance, maxDistance);
+
+    if (index > 0) {
+      scales[index - 1] =
+          _calculateScale(mouseDistance + minWidth, maxDistance) * 0.9;
     }
-  }
+    if (index < widget.items.length - 1) {
+      scales[index + 1] =
+          _calculateScale(mouseDistance + minWidth, maxDistance) * 0.9;
+    }
 
-  /// Get the target index of the drag.
-  int? _getTargetIndex(Offset globalPosition) {
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final localPosition = box.globalToLocal(globalPosition);
-    final dx = localPosition.dx;
-
-    return (dx ~/ (widget.itemSize + 24)).clamp(0, _items.length - 1);
+    return scales;
   }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: Colors.white.withOpacity(0.1),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 20,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(_items.length, (index) {
-                final item = _items[index];
+    final screenSize = MediaQuery.of(context).size;
+    final dockHeight = screenSize.height * heightFractionOfScreen;
 
-                return MouseRegion(
-                  onHover: (event) {
-                    _updateDragPosition(event.position);
-                    setState(() {});
-                  },
-                  onExit: (event) {
-                    setState(() {
-                      _dragPosition = null;
-                    });
-                  },
-                  child: Draggable<int>(
-                    data: index,
-                    feedback: Material(
-                      color: Colors.transparent,
-                      child: AnimatedScale(
-                        scale: widget.maxScale,
-                        duration: const Duration(milliseconds: 150),
-                        child: widget.builder(item),
+    return MouseRegion(
+      onHover: (event) => setState(() => _mousePosition = event.localPosition),
+      onExit: (_) => setState(() => _mousePosition = null),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: dockPadding,
+          vertical: dockPadding,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.2),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 15,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(
+                widget.items.length,
+                (index) {
+                  final scales = _calculateNeighborScales(index);
+                  final scale = scales[index];
+
+                  return GestureDetector(
+                    onTap: widget.items[index].onTap,
+                    child: Transform.translate(
+                      offset: Offset(0, _calculateOffset(index, scale)),
+                      child: AnimatedContainer(
+                        duration: animationDuration,
+                        curve: animationCurve,
+                        height: dockHeight,
+                        width: _calculateWidth(index, constraints),
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: iconPadding,
+                        ),
+                        child: Tooltip(
+                          message: widget.items[index].tooltip,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          textStyle: const TextStyle(color: Colors.white),
+                          child: SvgPicture.network(
+                            widget.items[index].icon,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
+                            ),
+                            placeholderBuilder: (BuildContext context) =>
+                                Container(
+                              color: Colors.white.withOpacity(0.3),
+                              child: const Icon(
+                                Icons.apps,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    childWhenDragging: const SizedBox(),
-                    onDragStarted: () {
-                      setState(() {
-                        _draggedIndex = index;
-                        _dragPosition = null;
-                      });
-                    },
-                    onDragEnd: (details) {
-                      setState(() {
-                        _draggedIndex = null;
-                        _dragPosition = null;
-                      });
-                    },
-                    onDragUpdate: (details) => _onDragUpdate(details, index),
-                    child: AnimatedScale(
-                      duration: const Duration(milliseconds: 150),
-                      scale: _dragPosition != null
-                          ? _getScale(
-                              (_dragPosition! -
-                                      (index * (widget.itemSize + 24) +
-                                          widget.itemSize / 2))
-                                  .abs(),
-                              _dragPosition!,
-                            )
-                          : 1.0,
-                      child: widget.builder(item),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
+                  );
+                },
+              ),
+            );
+          },
         ),
       ),
     );
