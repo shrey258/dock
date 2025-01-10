@@ -19,18 +19,55 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A macOS-like dock implementation in Flutter">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Dock">
+  <meta name="apple-mobile-web-app-title" content="Shrey's Dock">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>Dock</title>
+  <title>Shrey's Dock</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    body {
+      background-color: #1a1a1a;
+      margin: 0;
+      padding: 0;
+    }
+    
+    #mobile-message {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #1a1a1a;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    @media (max-width: 768px) {
+      #mobile-message {
+        display: flex;
+      }
+      #flutter-app {
+        display: none;
+      }
+    }
+  </style>
 
   <script>
     // The value below is injected by flutter build, do not touch.
@@ -55,5 +92,10 @@
   </script>
 </head>
 <body>
+  <div id="mobile-message">
+    <h1>Desktop Only</h1>
+    <p>This macOS-style dock demo is designed for desktop viewing. Please visit on a computer for the best experience.</p>
+  </div>
+  <div id="flutter-app"></div>
 </body>
 </html>
