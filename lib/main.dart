@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MyApp());
@@ -195,12 +194,8 @@ class _DraggableDesktopAreaState extends State<DraggableDesktopArea> {
         opacity: 0.3,
         child: _buildDesktopItem(item),
       ),
-      onDragStarted: () {
-        HapticFeedback.mediumImpact();
-      },
-      onDragEnd: (details) {
-        HapticFeedback.lightImpact();
-      },
+      onDragStarted: () {},
+      onDragEnd: (details) {},
       child: _buildDesktopItem(item),
     );
   }
@@ -248,113 +243,316 @@ class DesktopItem {
   });
 }
 
-class DockItem {
+/// A dock icon widget that mimics macOS dock behavior.
+///
+/// This widget provides interactive animations and visual feedback similar to
+/// the macOS dock, including hover effects, click animations, and tooltips.
+///
+/// Example:
+/// ```dart
+/// DockIcon(
+///   icon: Icons.folder_rounded,
+///   tooltip: 'Finder',
+///   isRecent: true,
+///   onTap: () => print('Finder tapped'),
+/// )
+/// ```
+class DockIcon extends StatefulWidget {
+  /// The icon to display in the dock.
   final IconData icon;
+
+  /// The tooltip text to show when hovering.
   final String tooltip;
+
+  /// The size of the icon container. Defaults to 50.
+  final double size;
+
+  /// Whether to show a recent-use indicator dot. Defaults to false.
+  final bool isRecent;
+
+  /// Callback function when the icon is tapped.
   final VoidCallback? onTap;
 
-  const DockItem({
+  // Cache computed values
+  final double _iconSize;
+  final BoxDecoration _baseDecoration;
+
+  DockIcon({
+    super.key,
     required this.icon,
     required this.tooltip,
+    this.size = 50,
+    this.isRecent = false,
     this.onTap,
-  });
+  })  : _iconSize = size * 0.6,
+        _baseDecoration = BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+        );
+
+  @override
+  State<DockIcon> createState() => _DockIconState();
 }
 
-class MacOSDock extends StatelessWidget {
-  const MacOSDock({super.key});
+class _DockIconState extends State<DockIcon>
+    with SingleTickerProviderStateMixin {
+  bool _isHovered = false;
+  bool _isPressed = false;
+  late final AnimationController _bounceController;
+  late final Animation<double> _bounceAnimation;
+
+  // Cache commonly used values
+  static const _animationDuration = Duration(milliseconds: 300);
+  static const _tooltipDelay = Duration(milliseconds: 500);
+  static const _bounceScaleFactor = 1.2;
+  static const _pressScaleFactor = 0.9;
+
+  // Cache decorations and styles
+  static final _tooltipDecoration = BoxDecoration(
+    color: Colors.black.withOpacity(0.8),
+    borderRadius: BorderRadius.circular(8),
+  );
+
+  static const _tooltipTextStyle = TextStyle(
+    color: Colors.white,
+    fontSize: 12,
+  );
+
+  static final _dotDecoration = BoxDecoration(
+    color: Colors.white.withOpacity(0.8),
+    shape: BoxShape.circle,
+  );
+
+  static const _dotMargin = EdgeInsets.symmetric(horizontal: 2);
+  static const _dotSize = Size(4, 4);
+
+  late final BoxDecoration _shadowDecoration;
+  late final Color _pressedColor;
+  late final Color _normalColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAnimations();
+    _initializeStyles();
+  }
+
+  void _initializeStyles() {
+    _shadowDecoration = BoxDecoration(
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.2),
+          blurRadius: 8,
+          spreadRadius: 1,
+        )
+      ],
+    );
+    _pressedColor = Colors.black.withOpacity(0.3);
+    _normalColor = Colors.black.withOpacity(0.2);
+  }
+
+  void _initializeAnimations() {
+    _bounceController = AnimationController(
+      duration: _animationDuration,
+      vsync: this,
+    );
+
+    _bounceAnimation = Tween<double>(
+      begin: 1.0,
+      end: _bounceScaleFactor,
+    ).animate(
+      CurvedAnimation(
+        parent: _bounceController,
+        curve: Curves.easeOutBack,
+        reverseCurve: Curves.easeInBack,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _bounceController.dispose();
+    super.dispose();
+  }
+
+  void _handleTapDown(TapDownDetails details) {
+    setState(() => _isPressed = true);
+  }
+
+  void _handleTapUp(TapUpDetails details) {
+    setState(() => _isPressed = false);
+    widget.onTap?.call();
+  }
+
+  void _handleTapCancel() {
+    setState(() => _isPressed = false);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return DragTarget<DesktopItem>(
-      onWillAccept: (_) {
-        HapticFeedback.selectionClick();
-        return true;
+    return MouseRegion(
+      onEnter: (_) {
+        setState(() => _isHovered = true);
+        _bounceController.forward();
       },
-      onAcceptWithDetails: (details) {
-        final item = details.data;
-        HapticFeedback.mediumImpact();
+      onExit: (_) {
+        setState(() => _isHovered = false);
+        _bounceController.reverse();
+      },
+      child: GestureDetector(
+        onTapDown: _handleTapDown,
+        onTapUp: _handleTapUp,
+        onTapCancel: _handleTapCancel,
+        child: SizedBox(
+          height: widget.size * 1.2,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildIconWithTooltip(),
+              const SizedBox(height: 4),
+              _buildIndicatorDots(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-        // Show a bouncing animation on the dock
-        final RenderBox box = context.findRenderObject() as RenderBox;
-        final position = box.localToGlobal(Offset.zero);
-        final dockCenter = position.dy + box.size.height / 2;
+  Widget _buildIconWithTooltip() {
+    return Tooltip(
+      message: widget.tooltip,
+      decoration: _tooltipDecoration,
+      textStyle: _tooltipTextStyle,
+      waitDuration: _tooltipDelay,
+      child: _buildAnimatedIcon(),
+    );
+  }
 
-        // Calculate bounce based on drop position
-        final dropDelta = (details.offset.dy - dockCenter).abs();
-        final bounceScale = math.max(0, 1 - dropDelta / 100);
-
-        if (bounceScale > 0.3) {
-          // Show success animation and feedback
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(item.icon, color: Colors.white, size: 16),
-                  const SizedBox(width: 8),
-                  Text('Opening ${item.name}...'),
-                ],
+  Widget _buildAnimatedIcon() {
+    return AnimatedBuilder(
+      animation: _bounceAnimation,
+      builder: (context, child) => Transform.scale(
+        scale: _bounceAnimation.value * (_isPressed ? _pressScaleFactor : 1.0),
+        child: child,
+      ),
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: _isHovered && !_isPressed
+            ? _shadowDecoration
+            : widget._baseDecoration.copyWith(
+                color: _isPressed ? _pressedColor : _normalColor,
               ),
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.black.withOpacity(0.8),
-              duration: const Duration(seconds: 1),
-            ),
-          );
-        }
-      },
-      onLeave: (_) {
-        HapticFeedback.lightImpact();
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-        return AnimatedScale(
-          scale: isHovering ? 1.1 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
+        child: Icon(
+          widget.icon,
+          size: widget._iconSize,
+          color: Colors.white.withOpacity(_isPressed ? 0.7 : 1.0),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIndicatorDots() {
+    if (!widget.isRecent && !_isHovered) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.isRecent) _buildDot(),
+        if (_isHovered) _buildDot(),
+      ],
+    );
+  }
+
+  Widget _buildDot() {
+    return SizedBox.fromSize(
+      size: _dotSize,
+      child: Container(
+        margin: _dotMargin,
+        decoration: _dotDecoration,
+      ),
+    );
+  }
+}
+
+class MacOSDock extends StatelessWidget {
+  const MacOSDock({Key? key}) : super(key: key);
+
+  void _handleAppTap(BuildContext context, String appName) {
+    // Simulate app launch with a snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Opening $appName...'),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.black.withOpacity(0.8),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          margin: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: DockContainer(
-            items: const [
-              DockItem(
+            children: [
+              DockIcon(
                 icon: Icons.folder_rounded,
                 tooltip: 'Finder',
+                isRecent: true,
+                onTap: () => _handleAppTap(context, 'Finder'),
               ),
-              DockItem(
-                icon: Icons.public_rounded,
-                tooltip: 'Chrome',
-              ),
-              DockItem(
-                icon: Icons.compass_calibration_rounded,
+              DockIcon(
+                icon: Icons.web_rounded,
                 tooltip: 'Safari',
+                onTap: () => _handleAppTap(context, 'Safari'),
               ),
-              DockItem(
+              DockIcon(
                 icon: Icons.mail_rounded,
                 tooltip: 'Mail',
+                isRecent: true,
+                onTap: () => _handleAppTap(context, 'Mail'),
               ),
-              DockItem(
+              DockIcon(
                 icon: Icons.calendar_month_rounded,
                 tooltip: 'Calendar',
+                onTap: () => _handleAppTap(context, 'Calendar'),
               ),
-              DockItem(
+              DockIcon(
                 icon: Icons.photo_library_rounded,
                 tooltip: 'Photos',
+                onTap: () => _handleAppTap(context, 'Photos'),
               ),
-              DockItem(
+              DockIcon(
                 icon: Icons.message_rounded,
                 tooltip: 'Messages',
+                onTap: () => _handleAppTap(context, 'Messages'),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
 
 class DockContainer extends StatefulWidget {
-  final List<DockItem> items;
+  final List<DockIcon> children;
 
   const DockContainer({
-    super.key,
-    required this.items,
-  });
+    Key? key,
+    required this.children,
+  }) : super(key: key);
 
   @override
   State<DockContainer> createState() => _DockContainerState();
@@ -373,7 +571,7 @@ class _DockContainerState extends State<DockContainer>
 
   late final AnimationController _controller;
   Offset? _mousePosition;
-  late List<DockItem> _items;
+  late List<DockIcon> _items;
   int? _dragIndex;
 
   @override
@@ -383,7 +581,7 @@ class _DockContainerState extends State<DockContainer>
       vsync: this,
       duration: animationDuration,
     );
-    _items = List.from(widget.items);
+    _items = List.from(widget.children);
   }
 
   @override
@@ -445,10 +643,9 @@ class _DockContainerState extends State<DockContainer>
       if (oldIndex < newIndex) {
         newIndex -= 1;
       }
-      final DockItem item = _items.removeAt(oldIndex);
+      final DockIcon item = _items.removeAt(oldIndex);
       _items.insert(newIndex, item);
     });
-    HapticFeedback.mediumImpact();
   }
 
   @override
@@ -489,10 +686,9 @@ class _DockContainerState extends State<DockContainer>
                     if (oldIndex < newIndex) {
                       newIndex -= 1;
                     }
-                    final DockItem item = _items.removeAt(oldIndex);
+                    final DockIcon item = _items.removeAt(oldIndex);
                     _items.insert(newIndex, item);
                   });
-                  HapticFeedback.mediumImpact();
                 },
                 proxyDecorator: (child, index, animation) {
                   return AnimatedBuilder(
@@ -532,10 +728,10 @@ class _DockContainerState extends State<DockContainer>
     );
   }
 
-  Widget _buildDockIcon(DockItem item, double dockHeight, double scale,
+  Widget _buildDockIcon(DockIcon item, double dockHeight, double scale,
       BoxConstraints constraints, int index) {
     return GestureDetector(
-      onTap: item.onTap,
+      onTap: () {},
       child: Transform.translate(
         offset: Offset(0, _calculateOffset(index, scale)),
         child: AnimatedContainer(
@@ -546,25 +742,7 @@ class _DockContainerState extends State<DockContainer>
           margin: const EdgeInsets.symmetric(
             horizontal: iconPadding,
           ),
-          child: Tooltip(
-            message: item.tooltip,
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.8),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            textStyle: const TextStyle(color: Colors.white),
-            child: Icon(
-              item.icon,
-              color: Colors.white.withOpacity(0.95),
-              size: dockHeight * 0.5 * scale,
-              shadows: [
-                Shadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 10,
-                ),
-              ],
-            ),
-          ),
+          child: item,
         ),
       ),
     );
@@ -579,7 +757,7 @@ class ReorderableRow extends StatefulWidget {
   final MainAxisSize mainAxisSize;
 
   const ReorderableRow({
-    super.key,
+    Key? key,
     required this.children,
     required this.onReorder,
     this.proxyDecorator,
@@ -592,58 +770,69 @@ class ReorderableRow extends StatefulWidget {
 
 class _ReorderableRowState extends State<ReorderableRow>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  int? _dragIndex;
-  int? _targetIndex;
-  bool _isDragging = false;
-  Offset? _dragOffset;
+  // Animation controller for smooth transitions
+  late AnimationController _animationController;
+
+  // Track dragging state
+  int? _currentDraggedIndex;
+  int? _currentDropTargetIndex;
+  bool _isCurrentlyDragging = false;
+  Offset? _currentDragOffset;
+
+  // UI Constants
+  static const double _iconSize = 80.0;
+  static const double _targetScaleFactor = 1.2;
+  static const Duration _animationDuration = Duration(milliseconds: 200);
+  static const Curve _animationCurve = Curves.easeOutQuart;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 200),
+      duration: _animationDuration,
     );
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
+  /// Calculate how much each icon should move to make space for dragged item
   double _getOffsetForIndex(int index) {
-    if (!_isDragging || _dragIndex == null || _targetIndex == null) {
+    if (!_isCurrentlyDragging ||
+        _currentDraggedIndex == null ||
+        _currentDropTargetIndex == null) {
       return 0.0;
     }
 
-    final draggedItemWidth = 80.0; // Approximate width of dock item
-    
-    if (_dragIndex! < _targetIndex!) {
-      // Moving right
-      if (index <= _dragIndex!) return 0.0;
-      if (index > _targetIndex!) return 0.0;
-      return -draggedItemWidth;
+    if (_currentDraggedIndex! < _currentDropTargetIndex!) {
+      // Moving right: shift items left to make space
+      if (index <= _currentDraggedIndex!) return 0.0;
+      if (index > _currentDropTargetIndex!) return 0.0;
+      return -_iconSize;
     } else {
-      // Moving left
-      if (index >= _dragIndex!) return 0.0;
-      if (index < _targetIndex!) return 0.0;
-      return draggedItemWidth;
+      // Moving left: shift items right to make space
+      if (index >= _currentDraggedIndex!) return 0.0;
+      if (index < _currentDropTargetIndex!) return 0.0;
+      return _iconSize;
     }
   }
 
-  void _updateTargetIndex(Offset globalPosition, BuildContext context) {
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final localPosition = box.globalToLocal(globalPosition);
-    
+  /// Update the target index based on drag position
+  void _updateDropTarget(Offset globalPosition, BuildContext context) {
+    final RenderBox containerBox = context.findRenderObject() as RenderBox;
+    final localPosition = containerBox.globalToLocal(globalPosition);
+
     for (int i = 0; i < widget.children.length; i++) {
-      final itemWidth = 80.0; // Approximate width of dock item
-      final itemX = i * itemWidth;
-      
-      if (localPosition.dx >= itemX && localPosition.dx < itemX + itemWidth) {
-        if (_targetIndex != i) {
-          setState(() => _targetIndex = i);
+      final itemStartX = i * _iconSize;
+      final itemEndX = itemStartX + _iconSize;
+
+      if (localPosition.dx >= itemStartX && localPosition.dx < itemEndX) {
+        if (_currentDropTargetIndex != i) {
+          setState(() => _currentDropTargetIndex = i);
         }
         return;
       }
@@ -662,64 +851,66 @@ class _ReorderableRowState extends State<ReorderableRow>
     );
   }
 
+  /// Build a draggable dock icon with animations and feedback
   Widget _buildDraggableItem(int index) {
     return Draggable<int>(
       data: index,
       dragAnchorStrategy: (draggable, context, position) {
-        return const Offset(40, 40);
+        // Center the drag feedback under the pointer
+        return const Offset(_iconSize / 2, _iconSize / 2);
       },
+      // Visual feedback while dragging
       feedback: SizedBox(
-        width: 80,
-        height: 80,
+        width: _iconSize,
+        height: _iconSize,
         child: widget.proxyDecorator?.call(
               widget.children[index],
               index,
-              _controller,
+              _animationController,
             ) ??
             widget.children[index],
       ),
-      childWhenDragging: const SizedBox(width: 80, height: 80),
+      childWhenDragging: SizedBox(width: _iconSize, height: _iconSize),
       onDragStarted: () {
         setState(() {
-          _dragIndex = index;
-          _targetIndex = index;
-          _isDragging = true;
+          _currentDraggedIndex = index;
+          _currentDropTargetIndex = index;
+          _isCurrentlyDragging = true;
         });
-        _controller.forward();
-        HapticFeedback.mediumImpact();
+        _animationController.forward();
       },
-      onDragUpdate: (details) {
-        _updateTargetIndex(details.globalPosition, context);
-      },
+      onDragUpdate: (details) =>
+          _updateDropTarget(details.globalPosition, context),
       onDragEnd: (_) {
-        if (_dragIndex != null && _targetIndex != null && _dragIndex != _targetIndex) {
-          widget.onReorder(_dragIndex!, _targetIndex!);
+        if (_currentDraggedIndex != null &&
+            _currentDropTargetIndex != null &&
+            _currentDraggedIndex != _currentDropTargetIndex) {
+          widget.onReorder(_currentDraggedIndex!, _currentDropTargetIndex!);
         }
         setState(() {
-          _dragIndex = null;
-          _targetIndex = null;
-          _isDragging = false;
+          _currentDraggedIndex = null;
+          _currentDropTargetIndex = null;
+          _isCurrentlyDragging = false;
         });
-        _controller.reverse();
-        HapticFeedback.lightImpact();
+        _animationController.reverse();
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
+        duration: _animationDuration,
+        curve: _animationCurve,
         transform: Matrix4.identity()..translate(_getOffsetForIndex(index)),
         child: DragTarget<int>(
           onWillAccept: (sourceIndex) =>
               sourceIndex != null && sourceIndex != index,
           onAccept: (sourceIndex) {
             widget.onReorder(sourceIndex, index);
-            HapticFeedback.mediumImpact();
           },
           builder: (context, candidateData, rejectedData) {
-            final isTarget = _targetIndex == index && _dragIndex != index;
+            final isTargetLocation = _currentDropTargetIndex == index &&
+                _currentDraggedIndex != index;
             return AnimatedScale(
-              scale: isTarget ? 1.2 : 1.0,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutBack,
+              scale: isTargetLocation ? _targetScaleFactor : 1.0,
+              duration: _animationDuration,
+              curve: _animationCurve,
               child: widget.children[index],
             );
           },
